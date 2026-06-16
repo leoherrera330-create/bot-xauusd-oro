@@ -1,13 +1,15 @@
-# BOT XAU/USD ORO - PROFESIONAL
+# BOT XAU/USD ORO - VERSION OPTIMIZADA PARA RENDER
 import yfinance as yf
 import pandas as pd
 import numpy as np
 import requests
 import time
 import json
+import threading
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from io import BytesIO
+from flask import Flask
 
 # ---------------- CONFIGURACIÓN ----------------
 BOT_TOKEN = ""
@@ -23,6 +25,16 @@ INTERVALO_REVISION = 1800
 HISTORIAL = "historial.json"
 ULTIMA_SENAL = {"hora": None, "tipo": None}
 # ------------------------------------------------
+
+# Servidor para mantener activo Render
+app = Flask(__name__)
+@app.route('/')
+def index():
+    return "Bot activo ✅"
+
+def mantener_activo():
+    while True:
+        time.sleep(600)  # Cada 10 minutos
 
 def enviar_texto(texto):
     try:
@@ -56,7 +68,7 @@ def hay_noticia_importante():
 
 def obtener_datos():
     try:
-        df = yf.Ticker(SIMBOLO).history(period="30d", interval="1h")
+        df = yf.Ticker(SIMBOLO).history(period="20d", interval="1h")
         return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
     except:
         return pd.DataFrame()
@@ -76,8 +88,8 @@ def calcular_indicadores(df):
 
 def crear_grafico(df, entrada, sl, tp1, tp2, tp3, tipo):
     plt.style.use("dark_background")
-    fig, ax = plt.subplots(figsize=(9,5), dpi=90)
-    ax.plot(df.index, df["Close"], color="#f7b731", lw=2, label="Precio XAU/USD")
+    fig, ax = plt.subplots(figsize=(8,4.5), dpi=80)
+    ax.plot(df.index, df["Close"], color="#f7b731", lw=2, label="XAU/USD")
     ax.plot(df.index, df["EMA50"], color="#00a8ff", lw=1.5, label="EMA 50")
     ax.plot(df.index, df["EMA200"], color="#ff4757", lw=1.5, label="EMA 200")
     if tipo == "COMPRA":
@@ -89,7 +101,7 @@ def crear_grafico(df, entrada, sl, tp1, tp2, tp3, tipo):
     ax.axhline(tp1, color="#1e90ff", ls=":", lw=1)
     ax.axhline(tp2, color="#1e90ff", ls=":", lw=1)
     ax.axhline(tp3, color="#1e90ff", ls=":", lw=1)
-    ax.legend(loc="upper left")
+    ax.legend(loc="upper left", fontsize=8)
     ax.grid(alpha=0.2)
     buffer = BytesIO()
     plt.savefig(buffer, format="png", bbox_inches="tight")
@@ -112,10 +124,10 @@ def analizar():
     if not sesion_activa():
         return
     if hay_noticia_importante():
-        enviar_texto("⚠️ Noticia económica importante → pausa temporal")
+        enviar_texto("⚠️ Noticia económica → pausa temporal")
         return
     df = obtener_datos()
-    if len(df) < 200:
+    if len(df) < 150:
         return
     df = calcular_indicadores(df)
     ult = df.iloc[-1]
@@ -140,7 +152,7 @@ def analizar():
 🛑 SL: {sl} | Riesgo {RIESGO_POR_OPERACION}%
 🎯 TP1: {tp1} | TP2: {tp2} | TP3: {tp3}
 ✅ EMA50>EMA200 | RSI {ult.RSI:.1f} | ATR {ult.ATR:.2f}"""
-        enviar_grafico(crear_grafico(df.tail(50), ent, sl, tp1, tp2, tp3, "COMPRA"), msg)
+        enviar_grafico(crear_grafico(df.tail(40), ent, sl, tp1, tp2, tp3, "COMPRA"), msg)
         guardar_historial({"fecha": datetime.now().strftime('%Y-%m-%d %H:%M'), "tipo": "COMPRA", "ent": ent, "sl": sl, "tp": [tp1, tp2, tp3]})
         ULTIMA_SENAL = {"hora": datetime.now(), "tipo": "COMPRA"}
 
@@ -156,12 +168,18 @@ def analizar():
 🛑 SL: {sl} | Riesgo {RIESGO_POR_OPERACION}%
 🎯 TP1: {tp1} | TP2: {tp2} | TP3: {tp3}
 ✅ EMA50<EMA200 | RSI {ult.RSI:.1f} | ATR {ult.ATR:.2f}"""
-        enviar_grafico(crear_grafico(df.tail(50), ent, sl, tp1, tp2, tp3, "VENTA"), msg)
+        enviar_grafico(crear_grafico(df.tail(40), ent, sl, tp1, tp2, tp3, "VENTA"), msg)
         guardar_historial({"fecha": datetime.now().strftime('%Y-%m-%d %H:%M'), "tipo": "VENTA", "ent": ent, "sl": sl, "tp": [tp1, tp2, tp3]})
         ULTIMA_SENAL = {"hora": datetime.now(), "tipo": "VENTA"}
 
-if __name__ == "__main__":
-    enviar_texto("🤖 *Bot XAU/USD Profesional INICIADO* ✅")
+def ciclo_bot():
+    enviar_texto("🤖 *Bot XAU/USD Optimizado INICIADO* ✅")
     while True:
         analizar()
         time.sleep(INTERVALO_REVISION)
+
+if __name__ == "__main__":
+    threading.Thread(target=mantener_activo, daemon=True).start()
+    threading.Thread(target=ciclo_bot, daemon=True).start()
+    app.run(host="0.0.0.0", port=10000)
+        
